@@ -7,6 +7,39 @@ from screeninfo import get_monitors
 from desktopmagic.screengrab_win32 import getRectAsImage, getDisplaysAsImages
 from tkinter import *
 from tkinter import messagebox
+import time
+
+class cooldown:
+    def __init__(self, timeout):
+        self.timeout = timeout
+        self.calltime = time.time() - timeout
+        self.func = None
+        self.obj = None
+    def __call__(self, *args, **kwargs):
+        if self.func is None:
+            self.func = args[0]
+            return self
+        now = time.time()
+        if now - self.calltime >= self.timeout:
+            self.calltime = now
+            if self.obj is None:
+                return self.func.__call__(*args, **kwargs)
+            else:
+                return self.func.__get__(self.obj, self.objtype)(*args, **kwargs)
+    def __get__(self, obj, objtype):
+        self.obj = obj
+        self.objtype = objtype
+        return self
+    @property
+    def remaining(self):
+        now = time.time()
+        delta = now - self.calltime
+        if delta >= self.timeout:
+            return 0
+        return self.timeout - delta
+    @remaining.setter
+    def remaining(self, value):
+        self.calltime = time.time() - self.timeout + value
 
 class ScanChat():
 
@@ -35,19 +68,25 @@ class ScanChat():
 
     #***************** Chat scan functions *************. 
 
-
-    def TakePictureOfChat(self):
-        chat_image = getRectAsImage((self.picture_rect))
+    @cooldown(0.5)
+    def TakePictureOfChat(self):   
+        print("picture taken")
         try:
+            chat_image = getRectAsImage((self.picture_rect))
             pytesseract.pytesseract.tesseract_cmd = '{}\\tess_folder\\tesseract.exe'.format(os.getcwd())
             image_text = pytesseract.image_to_string(chat_image, lang='eng', config= "--psm 1")
             self.root.clipboard_clear()
             self.root.clipboard_append(image_text)
-            messagebox.showinfo(title="OCR Output", message=image_text, parent=root)
-            print(image_text)
+            print(image_text.encode("unicode-escape"))
+            self.root.after(10, lambda title = "OCR-Output", message = image_text, parent = self.root : self.ShowMsgBox(title, message, parent))
         except Exception as e: 
-            messagebox.showerror(title="", message="error with ocr:\n {}".format(e), parent=root)
+            self.root.after(10, lambda title = "Error", message = f"error with ocr:\n {e}", parent = self.root : self.ShowMsgBox(title, message, parent))
 
+    def ShowMsgBox(self, title, message, parent = None):
+        if parent:
+            messagebox.showinfo(title=title, message=message, parent=parent)
+        else:
+            messagebox.showinfo(title=title, message=message)
 
 
     #***************** Tkinter clipping window / other functions *************.
