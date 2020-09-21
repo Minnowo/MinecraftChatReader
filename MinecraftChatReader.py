@@ -1,13 +1,142 @@
-import PIL 
-import pytesseract
 import sys, os
 import ctypes
 from GlobalHotkeys import Global_Hotkeys
-from screeninfo import get_monitors
-from desktopmagic.screengrab_win32 import getRectAsImage, getDisplaysAsImages
 from tkinter import *
 from tkinter import messagebox
 import time
+import threading
+import base64
+import keyboard
+import pynput
+
+SendInput = ctypes.windll.user32.SendInput
+KEYBOARD_MAPPING = {
+    'escape': 0x01,
+    'esc': 0x01,
+    'f1': 0x3B,
+    'f2': 0x3C,
+    'f3': 0x3D,
+    'f4': 0x3E,
+    'f5': 0x3F,
+    'f6': 0x40,
+    'f7': 0x41,
+    'f8': 0x42,
+    'f9': 0x43,
+    'f10': 0x44,
+    'f11': 0x57,
+    'f12': 0x58,
+    'printscreen': 0xB7,
+    'prntscrn': 0xB7,
+    'prtsc': 0xB7,
+    'prtscr': 0xB7,
+    'scrolllock': 0x46,
+    'pause': 0xC5,
+    '`': 0x29,
+    '1': 0x02,
+    '2': 0x03,
+    '3': 0x04,
+    '4': 0x05,
+    '5': 0x06,
+    '6': 0x07,
+    '7': 0x08,
+    '8': 0x09,
+    '9': 0x0A,
+    '0': 0x0B,
+    '-': 0x0C,
+    '=': 0x0D,
+    'backspace': 0x0E,
+    'insert': 0xD2 + 1024,
+    'home': 0xC7 + 1024,
+    'pageup': 0xC9 + 1024,
+    'pagedown': 0xD1 + 1024,
+    # numpad
+    'numlock': 0x45,
+    'divide': 0xB5 + 1024,
+    'multiply': 0x37,
+    'subtract': 0x4A,
+    'add': 0x4E,
+    'decimal': 0x53,
+    #KEY_NUMPAD_ENTER: 0x9C + 1024,
+    #KEY_NUMPAD_1: 0x4F,
+    #KEY_NUMPAD_2: 0x50,
+    #KEY_NUMPAD_3: 0x51,
+    #KEY_NUMPAD_4: 0x4B,
+    #KEY_NUMPAD_5: 0x4C,
+    #KEY_NUMPAD_6: 0x4D,
+    #KEY_NUMPAD_7: 0x47,
+    #KEY_NUMPAD_8: 0x48,
+    #KEY_NUMPAD_9: 0x49,
+    #KEY_NUMPAD_0: 0x52,
+    # end numpad
+    'tab': 0x0F,
+    'q': 0x10,
+    'w': 0x11,
+    'e': 0x12,
+    'r': 0x13,
+    't': 0x14,
+    'y': 0x15,
+    'u': 0x16,
+    'i': 0x17,
+    'o': 0x18,
+    'p': 0x19,
+    '[': 0x1A,
+    ']': 0x1B,
+    '\\': 0x2B,
+    'del': 0xD3 + 1024,
+    'delete': 0xD3 + 1024,
+    'end': 0xCF + 1024,
+    'capslock': 0x3A,
+    'a': 0x1E,
+    's': 0x1F,
+    'd': 0x20,
+    'f': 0x21,
+    'g': 0x22,
+    'h': 0x23,
+    'j': 0x24,
+    'k': 0x25,
+    'l': 0x26,
+    ';': 0x27,
+    "'": 0x28,
+    'enter': 0x1C,
+    'return': 0x1C,
+    'shift': 0x2A,
+    'shiftleft': 0x2A,
+    'z': 0x2C,
+    'x': 0x2D,
+    'c': 0x2E,
+    'v': 0x2F,
+    'b': 0x30,
+    'n': 0x31,
+    'm': 0x32,
+    ',': 0x33,
+    '.': 0x34,
+    '/': 0x35,
+    'shiftright': 0x36,
+    'ctrl': 0x1D,
+    'ctrlleft': 0x1D,
+    'win': 0xDB + 1024,
+    'winleft': 0xDB + 1024,
+    'alt': 0x38,
+    'altleft': 0x38,
+    ' ': 0x39,
+    'space': 0x39,
+    'altright': 0xB8 + 1024,
+    'winright': 0xDC + 1024,
+    'apps': 0xDD + 1024,
+    'ctrlright': 0x9D + 1024 }
+def PressKeyPynput(hexKeyCode):
+    extra = ctypes.c_ulong(0)
+    ii_ = pynput._util.win32.INPUT_union()
+    ii_.ki = pynput._util.win32.KEYBDINPUT(0, hexKeyCode, 0x0008, 0, ctypes.cast(ctypes.pointer(extra), ctypes.c_void_p))
+    x = pynput._util.win32.INPUT(ctypes.c_ulong(1), ii_)
+    SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
+
+def ReleaseKeyPynput(hexKeyCode):
+    extra = ctypes.c_ulong(0)
+    ii_ = pynput._util.win32.INPUT_union()
+    ii_.ki = pynput._util.win32.KEYBDINPUT(0, hexKeyCode, 0x0008 | 0x0002, 0, ctypes.cast(ctypes.pointer(extra), ctypes.c_void_p))
+    x = pynput._util.win32.INPUT(ctypes.c_ulong(1), ii_)
+    SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
 
 class cooldown:
     def __init__(self, timeout):
@@ -41,137 +170,101 @@ class cooldown:
     def remaining(self, value):
         self.calltime = time.time() - self.timeout + value
 
-class ScanChat():
+
+class EncryptText():
+
+    @classmethod
+    def xencode(cls, text):
+        return str(base64.b64encode(text.encode()))[2:]
+        
+        
+        
+
+    @classmethod
+    def xdecode(cls, text):
+        return base64.b64decode(text).decode()
+
+
+class ReadFile():
+    CHATLINES = ["[Client thread/INFO]: [CHAT]", "[main/INFO]: [CHAT]"]
+    filternames = []
+
+    @classmethod
+    def __init__(self):
+        self.name = "namespace bro"
+        logfile = open(os.getenv("APPDATA")+"/.minecraft/logs/latest.log", "r")
+        loglines = self.follow(logfile)
+        for line in loglines:
+            if self.CHATLINES[0] in line:
+                #print(line)
+                if any(i for i in self.filternames if i in line):
+                    print (line)
+                    if line.find("117487") != -1:
+                        line = line.split("117487")[1]
+                        line = EncryptText.xdecode(text = line)
+                        print(line)
+
+    @classmethod
+    def follow(self, thefile):
+        thefile.seek(0,2)
+        while True:
+            line = thefile.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            yield line
+
+class RootConfig():
 
     def __init__(self, root):
         self.root = root
-        self.start_x = None
-        self.start_y = None
-        self.end_x = None
-        self.end_y = None
-        self.dragbox = None
-        self.monitorid = None
 
-        self.picture_rect = [0, 0, 0, 0]
+        filter_name_entry = Entry(self.root)
 
-        # Create hotkeys 
-        self.select_scan_area = Global_Hotkeys.create_hotkey(self.root.winfo_id(), 0, ["<ctrl>", "<alt>"], "z", self.CreateClippingWindow)
-        self.scan_chat =        Global_Hotkeys.create_hotkey(self.root.winfo_id(), 1, ["<ctrl>", "<alt>"], "x", self.TakePictureOfChat)
-        print(self.select_scan_area)
-        print(self.scan_chat)
+threads = []
 
-        # Hide root window 
-        root.attributes("-alpha", 0)
-        root.attributes("-topmost", "true")
-        root.withdraw()
+def send():
+    time.sleep(0.5)
+    PressKeyPynput(KEYBOARD_MAPPING["ctrl"])
+    time.sleep(0.03)
+    PressKeyPynput(KEYBOARD_MAPPING["a"])
+    time.sleep(0.03)
+    PressKeyPynput(KEYBOARD_MAPPING["x"])
+    time.sleep(0.03)
+    ReleaseKeyPynput(KEYBOARD_MAPPING["ctrl"])
+    ReleaseKeyPynput(KEYBOARD_MAPPING["a"])
+    ReleaseKeyPynput(KEYBOARD_MAPPING["x"])
+    print(root.selection_get(selection = "CLIPBOARD"))
+    encrypted = "117487" + EncryptText.xencode(text = root.selection_get(selection = "CLIPBOARD"))
+    print(encrypted)
+    root.clipboard_clear()
+    root.clipboard_append(encrypted)
+    root.update()
+    time.sleep(0.03)
+    PressKeyPynput(KEYBOARD_MAPPING["ctrl"])
+    time.sleep(0.03)
+    PressKeyPynput(KEYBOARD_MAPPING["v"])
+    time.sleep(0.03)
+    ReleaseKeyPynput(KEYBOARD_MAPPING["ctrl"])
+    ReleaseKeyPynput(KEYBOARD_MAPPING["v"])
 
-
-    #***************** Chat scan functions *************. 
-
-    @cooldown(0.5)
-    def TakePictureOfChat(self):   
-        print("picture taken")
-        try:
-            chat_image = getRectAsImage((self.picture_rect))
-            pytesseract.pytesseract.tesseract_cmd = '{}\\tess_folder\\tesseract.exe'.format(os.getcwd())
-            image_text = pytesseract.image_to_string(chat_image, lang='eng', config= "--psm 1")
-            self.root.clipboard_clear()
-            self.root.clipboard_append(image_text)
-            print(image_text.encode("unicode-escape"))
-            self.root.after(10, lambda title = "OCR-Output", message = image_text, parent = self.root : self.ShowMsgBox(title, message, parent))
-        except Exception as e: 
-            self.root.after(10, lambda title = "Error", message = f"error with ocr:\n {e}", parent = self.root : self.ShowMsgBox(title, message, parent))
-
-    def ShowMsgBox(self, title, message, parent = None):
-        if parent:
-            messagebox.showinfo(title=title, message=message, parent=parent)
-        else:
-            messagebox.showinfo(title=title, message=message)
-
-
-    #***************** Tkinter clipping window / other functions *************.
-    
-    def CreateClippingWindow(self):
-        self.DestroyToplevel("clipping_window", match = False)
-
-        self.monitors = get_monitors()
-        for index, monitor in enumerate(self.monitors):
-            print(index, monitor)
-            monx = int(monitor.x); mony = int(monitor.y); monwidth = int(monitor.width); monheight = int(monitor.height)
-
-            clip_window_master = Toplevel(self.root)
-            clip_window_master.title(f"clipping_window_{index}")
-            clip_window_master.minsize(monwidth, monheight)
-            clip_window_master.geometry(f"+{monx + 1}+{mony}")
-            clip_window_master.attributes("-transparent", "blue")
-            clip_window_master.attributes("-alpha", 0.3)            
-            clip_window_master.overrideredirect(1)
-            clip_window_master.state("zoomed")
-            clip_window_master.attributes("-topmost", True)
-            clip_window_master.deiconify()
-
-            clip_canvas = Canvas(clip_window_master, bg="grey11", highlightthickness = 0)
-            clip_canvas.pack(fill = BOTH, expand = True)
-
-            clip_canvas.bind("<ButtonRelease-3>", self.OnRightClick)
-            clip_canvas.bind("<ButtonPress-1>", self.OnLeftClick)
-            clip_canvas.bind("<B1-Motion>", self.OnDrag)
-            clip_canvas.bind("<ButtonRelease-1>", self.OnRelease)
-
-            clip_window_master.lift()
-            clip_window_master.update()
-
-    def OnRightClick(self, event):
-        event.widget.delete(self.dragbox)
-        self.dragbox = None
-        self.DestroyToplevel("clipping_window", match = False)
-
-    def OnLeftClick(self, event):
-        self.start_x = event.widget.canvasx(event.x)
-        self.start_y = event.widget.canvasy(event.y)
-        self.monitorid = ctypes.windll.user32.MonitorFromPoint(int(self.root.winfo_pointerx()), int(self.root.winfo_pointery()), 2)
-        self.dragbox = event.widget.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline='red', width=1, fill="blue")
-
-    def OnDrag(self, event):
-        self.end_x, self.end_y = (event.x, event.y)
-        event.widget.coords(self.dragbox, self.start_x, self.start_y, self.end_x, self.end_y)
-
-    def OnRelease(self, event):
-        monitor_ids = {} 
-        for i in get_monitors(): monitor_ids[ctypes.windll.user32.MonitorFromPoint(i.x, i.y, 2)] = i
-
-        event.widget.delete(self.dragbox)
-        self.dragbox = None
-        self.DestroyToplevel("clipping_window", match = False)
-
-        if self.start_x <= self.end_x and self.start_y <= self.end_y:   x1, y1, x2, y2 = (self.start_x, self.start_y, self.end_x, self.end_y) # Right Down
-        elif self.start_x >= self.end_x and self.start_y <= self.end_y: x1, y1, x2, y2 = (self.end_x, self.start_y, self.start_x, self.end_y)  # Left Down
-        elif self.start_x <= self.end_x and self.start_y >= self.end_y: x1, y1, x2, y2 = (self.start_x, self.end_y, self.end_x, self.start_y) # Right Up 
-        elif self.start_x >= self.end_x and self.start_y >= self.end_y: x1, y1, x2, y2 = (self.end_x, self.end_y, self.start_x, self.start_y) # Left Up
-        monitor = monitor_ids[self.monitorid] 
-        for index, i in enumerate([int(self.start_x + monitor.x), int(self.start_y + monitor.y), int(self.end_x + monitor.x), int(self.end_y + monitor.y)]):
-            self.picture_rect[index] = i
-        print(self.picture_rect)
-
-    def DestroyToplevel(self, specific_title_only = None, match = True):
-        if specific_title_only:
-            for widget in self.root.winfo_children():
-                if isinstance(widget, Toplevel):
-                    if match and widget.title() == specific_title_only: widget.destroy()
-                    elif not match and widget.title().find(specific_title_only) != -1: widget.destroy()
-        else:
-            for widget in self.root.winfo_children():
-                if isinstance(widget, Toplevel):
-                    widget.destroy()
-
+def encrypt_text():
+    thread = threading.Thread(target = send)
+    threads.append(thread)
+    thread.start()
+    for i in threads: 
+        if not i.is_alive(): i.join()
+    print('hotkey pressed')
 
 
 if __name__ == "__main__":
-    #***************** Set process DPI aware for all monitors *************. 
-    errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(ctypes.c_int()))
-    errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    success = ctypes.windll.user32.SetProcessDPIAware()
-
+    #keyboard.press_and_release("ctrl+a")
+    #pydirectinput.press("a")
+    
     root = Tk()
-    chat = ScanChat(root)
+    chat = ReadFile
+    threading.Thread(target = chat, args = (), daemon = False).start()
+    chat.filternames.append("firekitty")
+    
+    Global_Hotkeys.create_hotkey(root.winfo_id(), 0, ["<ctrl>", "<alt>"], "e", encrypt_text)
     root.mainloop()
